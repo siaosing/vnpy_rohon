@@ -669,12 +669,22 @@ class RohonTdApi(TdApi):
         order_ref: str = data["OrderRef"]
         orderid: str = f"{frontid}_{sessionid}_{order_ref}"
 
+        if contract.exchange == Exchange.DCE:  # jxx add 20241223; in the morning, CTP pushes wrong InsertDate for DCE orders
+            current_date = datetime.today().strftime('%Y%m%d')
+            data['InsertDate'] = min(current_date,data['InsertDate'])
+
+        status: Status | None = STATUS_ROHON2VT.get(data["OrderStatus"], None)
+        if not status:
+            self.gateway.write_log(f"收到不支持的委托状态，委托号：{orderid}")
+            return
+
         timestamp: str = f"{data['InsertDate']} {data['InsertTime']}"
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S")
         dt = dt.replace(tzinfo=CHINA_TZ)
 
         tp: tuple = (data["OrderPriceType"], data["TimeCondition"], data["VolumeCondition"])
         if tp not in ORDERTYPE_ROHON2VT:
+            self.gateway.write_log(f"收到不支持的委托类型，委托类型：{tp}\n 委托数据: {data}")
             print("收到不支持类型的委托推送--------------")
             print("委托类型", tp)
             print(data)
