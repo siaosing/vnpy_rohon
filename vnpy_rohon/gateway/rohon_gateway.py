@@ -290,7 +290,13 @@ class RohonMdApi(MdApi):
         # 过滤没有时间戳的异常行情数据
         if not data["UpdateTime"]:
             return
-
+        # 过滤成交量为0的行情数据
+        if not data["Volume"]:
+            return
+        # 过滤非交易时段tick
+        if not ('08:59:00' <= data["UpdateTime"] <= '11:30:00' or '13:00:00' <= data["UpdateTime"] <= '16:00:00'
+                or data["UpdateTime"] >= '20:59:00' or data["UpdateTime"] <= '02:30:00'):
+            return
         # 过滤还没有收到合约数据前的行情推送
         symbol: str = data["InstrumentID"]
         contract: ContractData = symbol_contract_map.get(symbol, None)
@@ -307,6 +313,9 @@ class RohonMdApi(MdApi):
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S.%f")
         dt = dt.replace(tzinfo=CHINA_TZ)
 
+        time_now = self.current_datetime.replace(tzinfo=CHINA_TZ)
+        if abs(dt - time_now) > timedelta(minutes=10):
+            return
         tick: TickData = TickData(
             symbol=symbol,
             exchange=contract.exchange,
