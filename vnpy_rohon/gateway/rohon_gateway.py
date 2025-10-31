@@ -726,12 +726,24 @@ class RohonTdApi(TdApi):
         self.gateway.write_log(f"onRtnTrade: tradetime = {dt}, symbol={symbol}, orderid={orderid}")
 
         # 对于大商所和广期所夜盘成交时间戳的特殊处理
-        if contract.exchange in {Exchange.DCE, Exchange.GFEX}:
-            now: datetime = datetime.now(CHINA_TZ)
+        # if contract.exchange in {Exchange.DCE, Exchange.GFEX}:
+        #     now: datetime = datetime.now(CHINA_TZ)
 
-            # 如果比本机时间时间提前超过10分钟，则认为是夜盘，日期减1
-            if (dt - now).total_seconds() >= 600:
-                dt -= timedelta(days=1)
+        #     # 如果比本机时间时间提前超过10分钟，则认为是夜盘，日期减1
+        #     if (dt - now).total_seconds() >= 600:
+        #         dt -= timedelta(days=1)
+        now: datetime = datetime.now(CHINA_TZ)
+
+        # rohon 接口返回的夜盘订单日期是交易日而非当前日期
+        # 夜盘收到推送后需要立即更改 白天收到推送后不用更改(因为不需要推送给gateway和engine)
+        # 实际交易时间               成交后推送的时间戳   成交后修复方案           白天重启后时间戳    白天收到推送后修复方案
+        # 周一到周五 21:00~00:00      dt - now >= 600    dt.day = now.day       dt - now >= 600    dt.day = now.day (相当于没有修复)
+        # 周二到周五 00:00~02:30      dt - now <= 600    正确 不用修复           dt - now < 0       正确 不用修复
+        # 周六 00:00~02:30           dt - now >= 600    dt.day = now.day       dt - now < 0       错误 但不用修复
+        # 综上 如果比本机时间时间延迟超过10分钟，则认为是夜盘21:00~00:00的订单
+        if (dt - now).total_seconds() >= 600:
+            # dt -= timedelta(days=1)  # 对于周五晚上的订单 直接减1可能有误 更准确的做法是用now.day替换dt.day
+            dt = dt.replace(day = now.day)
 
         trade: TradeData = TradeData(
             symbol=symbol,
@@ -745,7 +757,12 @@ class RohonTdApi(TdApi):
             datetime=dt,
             gateway_name=self.gateway_name
         )
-        self.gateway.on_trade(trade)
+        time_now = datetime.now(dt.tzinfo)
+        if abs(dt - time_now) < timedelta(minutes=10):  # 如果时间戳延迟小于10分钟，则说明是刚成交的订单 需要推送
+            self.gateway.on_trade(trade)
+            self.gateway.write_log("need push to self.gateway.on_trade")
+        # else:
+        #     self.gateway.write_log(f"need not push ******** {dt}, abs(dt - time_now) = {abs(dt - time_now)}")
         self.gateway.write_log(f"onRtnTrade: {symbol},{trade.direction},{trade.offset},price={trade.price: g},volume={trade.volume},orderid={orderid},tradetime={dt}")
 
 
