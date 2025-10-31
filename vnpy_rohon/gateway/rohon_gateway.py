@@ -251,6 +251,7 @@ class RohonMdApi(MdApi):
         self.brokerid: str = ""
 
         self.current_date: str = datetime.now().strftime("%Y%m%d")
+        self.current_datetime: datetime = datetime.now()
 
     def onFrontConnected(self) -> None:
         """服务器连接成功回报"""
@@ -395,6 +396,7 @@ class RohonMdApi(MdApi):
     def update_date(self) -> None:
         """更新当前日期"""
         self.current_date = datetime.now().strftime("%Y%m%d")
+        self.current_datetime = datetime.now()
 
 
 class RohonTdApi(TdApi):
