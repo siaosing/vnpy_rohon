@@ -507,10 +507,12 @@ class RohonTdApi(TdApi):
         self.gateway.on_order(order)
 
         self.gateway.write_error("交易委托失败", error)
+        self.gateway.write_log(f"onRspOrderInsert: {symbol},{order.direction},{order.offset}, price={order.price: g}, volume={order.volume}, status={order.status},orderid={orderid}")
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool) -> None:
         """委托撤单失败回报"""
         self.gateway.write_error("交易撤单失败", error)
+        self.gateway.write_log(f"onRspOrderAction: 撤单失败{data}")
 
     def onRspSettlementInfoConfirm(self, data: dict, error: dict, reqid: int, last: bool) -> None:
         """确认结算单回报"""
@@ -597,6 +599,10 @@ class RohonTdApi(TdApi):
         account.available = data["Available"]
 
         self.gateway.on_account(account)
+        if datetime.now().minute == 0 and datetime.now().second < 4:
+            self.gateway.write_log(f"onRspQryTradingAccount: accountid = {account.accountid},balance = {account.balance}, \
+                               available = {account.available},frozen = {account.frozen}, gateway_name = {account.gateway_name}")
+
 
     def onRspQryInstrument(self, data: dict, error: dict, reqid: int, last: bool) -> None:
         """合约查询回报"""
@@ -689,6 +695,7 @@ class RohonTdApi(TdApi):
         self.gateway.on_order(order)
 
         self.sysid_orderid_map[data["OrderSysID"]] = orderid
+        self.gateway.write_log(f"onRtnOrder: {symbol},{order.direction},{order.offset}, price={order.price: g}, volume={order.volume}, traded={order.traded}, status={order.status},orderid={orderid},ordertime={dt}")
 
     def onRtnTrade(self, data: dict) -> None:
         """成交数据推送"""
@@ -704,6 +711,7 @@ class RohonTdApi(TdApi):
         timestamp: str = f"{data['TradeDate']} {data['TradeTime']}"
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S")
         dt = dt.replace(tzinfo=CHINA_TZ)
+        self.gateway.write_log(f"onRtnTrade: tradetime = {dt}, symbol={symbol}, orderid={orderid}")
 
         # 对于大商所和广期所夜盘成交时间戳的特殊处理
         if contract.exchange in {Exchange.DCE, Exchange.GFEX}:
@@ -726,6 +734,8 @@ class RohonTdApi(TdApi):
             gateway_name=self.gateway_name
         )
         self.gateway.on_trade(trade)
+        self.gateway.write_log(f"onRtnTrade: {symbol},{trade.direction},{trade.offset},price={trade.price: g},volume={trade.volume},orderid={orderid},tradetime={dt}")
+
 
     def connect(
         self,
@@ -850,7 +860,11 @@ class RohonTdApi(TdApi):
         }
 
         self.reqid += 1
-        self.reqOrderAction(rohon_req, self.reqid)
+        n: int = self.reqOrderAction(rohon_req, self.reqid)
+        if n:
+            self.gateway.write_log(f"撤单请求发送失败，错误代码：{n}")
+            return
+        self.gateway.write_log(f"cancel_order: {req.symbol},req.orderid = {req.orderid}")
 
     def query_account(self) -> None:
         """查询资金"""
