@@ -615,6 +615,8 @@ class RohonTdApi(TdApi):
                 product=product,
                 size=data["VolumeMultiple"],
                 pricetick=data["PriceTick"],
+                min_volume=data["MinLimitOrderVolume"],
+                max_volume=data["MaxLimitOrderVolume"],
                 gateway_name=self.gateway_name
             )
 
